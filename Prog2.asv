@@ -1,0 +1,142 @@
+clear all;
+tic
+
+%% Bases dedades:
+% 256_base: La primera que es va fer i amb la que es va generar "output4.txt"
+% 256_opt: La que es va generar després d'optimitzar els metodes de conversió i quantificació
+% 256_delmat: La que es va generar després d'aplicar delmat de factor K
+% 256_4x4 :La que es va generar al aplicar una bola 4x4 en comptes de 128
+% 128: La que es va generar quantitzant a 128 bins en comptes de 256
+BBDD = "256_base"
+
+if strcmp(BBDD,"256_base")
+    load("H_csd_2000.mat","H_csd") % Carreguem la BDD d'histogrames
+elseif strcmp(BBDD,"256_opt")
+    load("H_CSD_2000imgs_256bins_opt.mat","H_csd_opt_2000")
+
+elseif strcmp(BBDD,"256_delmat")
+    load("H_CSD_2000imgs_256bins_delmat.mat","H_CSD_delmat")
+
+elseif strcmp(BBDD,"256_opt")
+    
+elseif strcmp(BBDD,"256_4x4")
+
+else
+
+end
+    
+
+
+% Data variables LAB
+% User_root      = 'C:\Users\biel.sala';
+% Data_root      = '\Downloads\Prog1\';
+% Input_filename = 'input.txt';
+% Output_filename= 'output4.txt';
+% Candidates     = 10;  % Number of candidates to retrieve
+
+% Data variables laptop Alejandro
+User_root      = 'G:\Mi unidad\UPC';
+Data_root      = '\Curso\10 - 24-25 P\PIV\PIV Lab\Prog2\';
+Input_filename = 'input.txt';
+Output_filename= 'output.txt';
+Candidates     = 10;  % Number of candidates to retrieve
+tipus_distancia = 'hellinger'; % 'taxi' o 'hellinger'
+
+num_bdd_images=size(H_csd,1);
+
+% Define Image Database directory and images filename prefix
+picture_path = 'G:\Mi unidad\UPC\Curso\10 - 24-25 P\PIV\PIV Lab\Prog2\UKentuckyDatabase\';
+
+fid = fopen(Input_filename, 'r'); % Abrir el archivo en modo lectura
+
+
+Input = textread([User_root, Data_root, Input_filename],'%s');
+
+% Get the Number of images to be Queried
+num_input_images = length(Input);
+
+%
+noms = readlines([User_root, Data_root, Input_filename]);
+
+% Open output file for writing the results
+a=fopen([User_root, Data_root, Output_filename],'w');
+
+perfect_precision = [1,1,1,1,4/5,4/6,4/7,4/8,4/9,4/10];
+perfect_recall = [0.25,0.5,0.75,1,1,1,1,1,1,1];
+
+precision = zeros(num_input_images,Candidates);
+recall = zeros(num_input_images,Candidates);
+
+
+for i=1:num_input_images
+
+    % Per cada imatge a input.txt calculem el seu histograma
+    picture_name = noms(i);
+
+    %Extraccio del numero de la imatge que estem fent query
+    auxStr=extractBefore(picture_name,".jpg");
+    auxStr2 =extractAfter(auxStr,'ukbench');
+    picture_name_number=str2num(auxStr2);
+
+    %"agafem" l'histograma de la imatge que estem query de la BBDD.
+    % +1 perquè les imatges comencem per la 00000 però l'index Matlab
+    % comença pel numero 1
+    picture_hist = H_csd(picture_name_number+1,:);
+    
+    %Comparem l'histograma calculat amb tots els histogramas de H
+    for j=1:num_bdd_images
+
+        d(j)=distancia4_variable(picture_hist,H_csd(j,:),tipus_distancia);
+
+    end
+    
+    fprintf(a,'Retrieved list for query image %s \n',char(Input(i)));
+    
+    % Here, is suposed that the system gets a index vector to the most similar
+    % images in the vector Similar_images;
+    Similar_images = buscador_10index_minims(d);
+
+    % Writing the results at the Output file
+    for j=1:Candidates
+        fprintf(a,'%s\n',sprintf('ukbench%05d.jpg',Similar_images(j)));
+    end
+    fprintf(a,'\n');
+
+    %Comptar cuants encert hi ha hagut per cada imatge per fer el
+    aciertos = 0;
+    for k=1:length(Similar_images)
+        %disp("Comparem " + picture_name_number + " amb " + Similar_images(k));
+        if (cuentaAciertos(picture_name_number,Similar_images(k)))
+            aciertos = aciertos +1;
+        end
+        precision(i,k) = aciertos/k;
+        recall(i,k) = aciertos/4;
+    end
+end
+
+%% Calcul f_score
+
+%promitjar tots els precision i recall i calcular l'fscore
+precision_avg = sum(precision)/num_input_images;
+recall_avg = sum(recall)/num_input_images;
+f_score = max((2.*precision_avg.*recall_avg)./(precision_avg+recall_avg));
+
+%% gráfico del precision recall
+
+% contour per les isolines
+x = linspace(0,1);
+y = linspace(0,1);
+[X,Y] = meshgrid(x,y); % contour nomes accepta matrius
+Z = (2.*X.*Y)./(X+Y); % formula del f-score per a que calculi les isolinies
+contour(X,Y,Z)
+hold on
+
+plot(perfect_recall,perfect_precision,'k-diamond','LineWidth',2)
+grid on
+hold on
+title(['Grafic Precision-Recall | Distancia: ', tipus_distancia])
+plot(recall_avg,precision_avg,'r-*')
+xlabel('Recall');
+ylabel('Precision');
+legend('isoFScore','Optimal (F=1)',strcat('G4 (F=',num2str(f_score),')'),'Location','southwest')
+toc
